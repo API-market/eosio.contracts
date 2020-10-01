@@ -112,7 +112,7 @@ namespace eosiosystem {
     *  for RAM over time.
     */
    void system_contract::sellram( const name& account, int64_t bytes ) {
-      require_auth(oresystem_account);
+      require_auth( oresystem_account );
       update_ram_supply();
 
       check( bytes > 0, "cannot sell negative byte" );
@@ -391,7 +391,7 @@ namespace eosiosystem {
       check( unstake_cpu_quantity >= zero_asset, "must unstake a positive amount" );
       check( unstake_net_quantity >= zero_asset, "must unstake a positive amount" );
       check( unstake_cpu_quantity.amount + unstake_net_quantity.amount > 0, "must unstake a positive amount" );
-      check( _gstate.total_activated_stake >= min_activated_stake,
+      check( _gstate.thresh_activated_stake_time != time_point(),
              "cannot undelegate bandwidth until the chain is activated (at least 15% of all tokens participate in voting)" );
 
       changebw( from, receiver, -unstake_net_quantity, -unstake_cpu_quantity, false);
