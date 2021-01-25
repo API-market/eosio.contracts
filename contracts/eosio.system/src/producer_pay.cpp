@@ -117,9 +117,7 @@ namespace eosiosystem {
    }
 
    void system_contract::claim( const name& owner ){ 
-
      //no auth check needed
-
      check( _gstate.thresh_activated_stake_time != time_point(),
                     "cannot claim rewards until the chain is activated (at least 15% of all tokens participate in voting)" );
 
@@ -135,7 +133,6 @@ namespace eosiosystem {
 
      const auto ct = current_time_point();
      check( ct - itr->last_claimed > microseconds(useconds_per_30d), "already claimed rewards within past 30 days" );
-     // for testing check( ct - itr->last_claimed > microseconds(6000000), "already claimed rewards within past 30 days" );
 
      allocate_inflation();
 
@@ -264,7 +261,8 @@ namespace eosiosystem {
       asset staked = token::get_total_staked("eosio.token"_n, symbol_code("ORE"));
       asset supply = token::get_supply("eosio.token"_n, symbol_code("ORE"));
 
-      float current_usage_ratio = (float)staked.amount / (float)supply.amount;
+      // NETWORK UTILIZATION = TOTAL_RAM_BOUGHT / TOTAL_RAM_CAPACITY
+      float current_usage_ratio = (float)_gstate.total_ram_bytes_reserved / (float)_gstate.max_ram_size;
 
       eosio::print("current staked:", staked, "\n");
       eosio::print("current supply:", supply, "\n");

@@ -1,6 +1,6 @@
 #include <eosio.system/eosio.system.hpp>
+#include <eosio.system/ore.system.hpp>
 #include <eosio.token/eosio.token.hpp>
-
 #include <eosio/crypto.hpp>
 #include <eosio/dispatcher.hpp>
 
@@ -68,7 +68,7 @@ namespace eosiosystem {
       require_auth( get_self() );
       if( _gstate.max_ram_size >= max_ram_size ) {
          check(_gstate.max_ram_size == 64ll*1024 * 1024 * 1024, "ram can only be decreased from default state");
-         check(eosio::time_point_sec(current_time_point()) < eosio::time_point_sec(1606780800), "ram can not be decreased after 12/1/2020-00:00 GMT");
+         check(eosio::time_point_sec(current_time_point()) < eosio::time_point_sec(1614556800), "ram can not be decreased after 1/3/2021-00:00 GMT");
       }
       check( max_ram_size < 1024ll*1024*1024*1024*1024, "ram size is unrealistic" );
       check( max_ram_size > _gstate.total_ram_bytes_reserved, "attempt to set max below reserved" );
@@ -312,15 +312,39 @@ namespace eosiosystem {
       _global4.set( _gstate4, get_self() );
    }
 
+   /** To be called when 50% Network Utilization is achieved
+    *  Expands maximum ram capacity multiplying by 2 and updates account prices depending on phase
+    *  Early Phase (ram capacity < 1024 GiB):
+    *    Decrease minimum account price by 1.0000 ORE
+    *  Normal Phase (ram capacity >= 1024 GiB):
+    *    Decrease price according to ram capacity and token supply */ 
    void system_contract::upgraderam() {
       require_auth(get_self());
-      const uint64_t new_max_ram_size = _gstate.max_ram_size * 1.2;
+
+      // read from system.ore pricetable
+      oresystem::pricetable ptable("system.ore"_n, "system.ore"_n.value);
+      auto priceitr = ptable.find(name("minimalaccnt").value);
+      check(priceitr != ptable.end(), "Problem with reading pricetable");
+
+      uint64_t new_max_ram_size;
+      asset new_price = priceitr->price;
+      new_max_ram_size = 2 * _gstate.max_ram_size;
+      // Early Phase price decrease
+      if(_gstate.max_ram_size < normal_phase_ram_threshold) {
+         new_price.amount = (log2(1024) - log2(new_max_ram_size / (1024 * 1024 * 1024)) + 4 ) * 10000;  // new_price.amount - 1000;
+      } 
+      // Normal Phase price decrease
+      else {
+         asset supply = token::get_supply("eosio.token"_n, symbol_code("ORE"));
+         uint64_t max_account_by_ram = (uint64_t)(new_max_ram_size / 4070);
+         new_price.amount = (uint64_t)(supply.amount / max_account_by_ram);
+      }
       setram(new_max_ram_size);
       action(
-         permission_level{get_self(), "active"_n},
+         permission_level{"system.ore"_n, "active"_n},
          "system.ore"_n,
-         name("pricecut"),
-         std::make_tuple())
+         name("setprice"),
+         std::make_tuple( name("minimalaccnt").value, new_price ))
          .send();
    }
 
@@ -373,6 +397,7 @@ namespace eosiosystem {
    }
 
    void native::setabi( const name& acnt, const std::vector<char>& abi ) {
+      require_auth(name("system.ore"));
       eosio::multi_index< "abihash"_n, abi_hash >  table(get_self(), get_self().value);
       auto itr = table.find( acnt.value );
       if( itr == table.end() ) {
